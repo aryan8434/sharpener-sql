@@ -1,0 +1,28 @@
+const mysql = require("mysql2")
+const connection = mysql.createConnection({
+    host:"localhost",
+    password:"123456",
+    user:"root",
+    database:"database4"
+})
+
+connection.connect((err)=>{
+    if(err){
+        console.log(err);
+        return;
+    }
+    console.log("connected to db")
+    const query = `create table students if not exist
+        id INT_AUTOINCREMENT PRIMARY KEY,
+        name varchar(20),
+        email varchar(20,unique),
+        age int`
+
+    connection.execute(query,(err)=>{
+        console.log("Error creating query = ",err);
+        return;
+    })
+    console.log("Table created successfully")
+})
+
+module.exports= connection;
