@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Insert Data</h1>
+    <form id="userForm">
+
+    
+    <label for="name">Name</label>
+    <input type="text" name="name" id="name" required>
+    <label for="email">Email</label>
+    <input type="email" name="email" id="email">
+    <button type="submit">submit</button>
+    </form>
+    <h2>lists</h2>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+        </tr>
+        <tbody id="userdata">
+
+        </tbody>
+    </table>
+
+    <script>
+        const api = "http://localhost:3000/users";
+        function loadUsers(){
+            fetch(api)
+            .then(res=>res.json())
+            .then(data=>{
+                const tbody = document.getElementById("userdata");
+                tbody.innerHTML="";
+                data.forEach(user=>{
+                    const tr=`
+                    <tr>
+                        <td>${user.id}</td>
+                        <td>${user.name}</td>
+                        <td>${user.email}</td>
+                        </tr>`
+                        tbody.innerHTML+=tr;
+                })
+            }).catch((err)=>console.log(err));
+        }
+        document.getElementById("userForm").addEventListener("submit", function(e) {
+            e.preventDefault();
+            const name = document.getElementById("name").value;
+            const email = document.getElementById("email").value;
+            fetch(api, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ name: name, email: email })
+            })
+            .then(res => res.json())
+            .then(result => {
+                alert("User added successfully!");
+                document.getElementById("userForm").reset(); 
+                loadUsers(); 
+            })
+            .catch(err => console.error("Error adding user:", err));
+        });
+      
+        loadUsers();
+
+
+
+    </script>
+</body>
+</html>
