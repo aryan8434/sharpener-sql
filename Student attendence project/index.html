@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>School Attendance</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: #242424;
+        font-family: Arial, sans-serif;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 76px;
+        padding: 16px 24px;
+        background: #f3f3f3;
+        border-radius: 0 0 10px 10px;
+        box-shadow: 0 2px 5px #00000014;
+      }
+
+      .date-search {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      label,
+      .student-name,
+      .attendance-option {
+        font-size: 15px;
+      }
+
+      input[type="date"] {
+        padding: 9px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+
+      button {
+        padding: 10px 14px;
+        color: #fff;
+        border: 0;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
+      #search-button {
+        background: #087df0;
+      }
+
+      #report-button {
+        margin-right: 10%;
+        background: #36aa83;
+      }
+
+      #mark-button {
+        margin-top: 16px;
+        background: #d97727;
+      }
+
+      main {
+        padding: 28px 4%;
+      }
+
+      #message {
+        min-height: 22px;
+        color: #333;
+      }
+
+      #message.error {
+        color: #b42318;
+      }
+
+      .student-row {
+        display: grid;
+        grid-template-columns: minmax(180px, 35%) minmax(220px, 1fr);
+        align-items: center;
+        min-height: 39px;
+      }
+
+      .attendance-options {
+        display: flex;
+        gap: 36px;
+      }
+
+      .attendance-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+
+      .report-status {
+        font-weight: 600;
+      }
+
+      .report-status.present {
+        color: #16803c;
+      }
+
+      .report-status.absent {
+        color: #b42318;
+      }
+
+      .report-summary {
+        margin: 12px 0 0;
+        color: #555;
+      }
+
+      @media (max-width: 600px) {
+        .toolbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        #report-button {
+          margin-right: 0;
+        }
+
+        main {
+          padding: 20px 16px;
+        }
+
+        .student-row {
+          grid-template-columns: 1fr;
+          gap: 8px;
+          padding: 10px 0;
+          border-bottom: 1px solid #eee;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="date-search">
+        <label for="date">Select a Date:</label>
+        <input type="date" id="date" name="date" required />
+        <button id="search-button" type="button">Search</button>
+      </div>
+      <button id="report-button" type="button">Fetch Attendance report</button>
+    </header>
+
+    <main>
+      <p id="message" role="status" aria-live="polite"></p>
+      <section id="attendance-list" aria-label="Student attendance"></section>
+      <button id="mark-button" type="button" hidden>Mark Attendance</button>
+      <p id="report-summary" class="report-summary" hidden></p>
+    </main>
+
+    <script>
+      const dateInput = document.getElementById("date");
+      const list = document.getElementById("attendance-list");
+      const message = document.getElementById("message");
+      const markButton = document.getElementById("mark-button");
+      const summary = document.getElementById("report-summary");
+      const searchButton = document.getElementById("search-button");
+      const reportButton = document.getElementById("report-button");
+
+      function today() {
+        const now = new Date();
+        const offset = now.getTimezoneOffset();
+        return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
+      }
+
+      function setMessage(text, isError) {
+        message.textContent = text;
+        message.classList.toggle("error", Boolean(isError));
+      }
+
+      function selectedDate() {
+        if (!dateInput.value) {
+          setMessage("Please select a date.", true);
+          dateInput.focus();
+          return null;
+        }
+        return dateInput.value;
+      }
+
+      async function request(url, options) {
+        const response = await fetch(url, options);
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "The request could not be completed.");
+        }
+        return result;
+      }
+
+      function renderStudents(students) {
+        list.replaceChildren();
+        summary.hidden = true;
+        markButton.hidden = students.length === 0;
+
+        students.forEach((student) => {
+          const row = document.createElement("div");
+          row.className = "student-row";
+
+          const name = document.createElement("span");
+          name.className = "student-name";
+          name.textContent = student.name;
+
+          const options = document.createElement("div");
+          options.className = "attendance-options";
+
+          ["Present", "Absent"].forEach((status) => {
+            const label = document.createElement("label");
+            label.className = "attendance-option";
+
+            const radio = document.createElement("input");
+            radio.type = "radio";
+            radio.name = `attendance-${student.id}`;
+            radio.value = status;
+            radio.checked = student.status === status;
+
+            label.append(radio, document.createTextNode(status));
+            options.append(label);
+          });
+
+          row.append(name, options);
+          list.append(row);
+        });
+      }
+
+      async function searchAttendance() {
+        const date = selectedDate();
+        if (!date) return;
+
+        try {
+          setMessage("Loading students…");
+          const result = await request(
+            `/api/students?date=${encodeURIComponent(date)}`
+          );
+          renderStudents(result.students);
+          setMessage(
+            result.students.length
+              ? `Mark attendance for ${date}.`
+              : "No students found."
+          );
+        } catch (error) {
+          setMessage(error.message, true);
+        }
+      }
+
+      async function markAttendance() {
+        const date = selectedDate();
+        if (!date) return;
+
+        const entries = Array.from(
+          list.querySelectorAll(".student-row")
+        ).map((row) => {
+          const selected = row.querySelector('input[type="radio"]:checked');
+          return selected
+            ? {
+                studentId: Number(selected.name.replace("attendance-", "")),
+                status: selected.value,
+              }
+            : null;
+        });
+
+        if (entries.some((entry) => entry === null)) {
+          setMessage("Choose Present or Absent for every student.", true);
+          return;
+        }
+
+        try {
+          markButton.disabled = true;
+          setMessage("Saving attendance…");
+          await request("/api/attendance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ date, attendance: entries }),
+          });
+          setMessage(`Attendance saved for ${date}.`);
+        } catch (error) {
+          setMessage(error.message, true);
+        } finally {
+          markButton.disabled = false;
+        }
+      }
+
+      async function fetchReport() {
+        const date = selectedDate();
+        if (!date) return;
+
+        try {
+          setMessage("Loading attendance report…");
+          const result = await request(
+            `/api/attendance/report?date=${encodeURIComponent(date)}`
+          );
+          list.replaceChildren();
+          markButton.hidden = true;
+
+          let present = 0;
+          let absent = 0;
+          result.students.forEach((student) => {
+            const row = document.createElement("div");
+            row.className = "student-row";
+
+            const name = document.createElement("span");
+            name.className = "student-name";
+            name.textContent = student.name;
+
+            const status = document.createElement("span");
+            status.className = `report-status ${
+              student.status ? student.status.toLowerCase() : ""
+            }`;
+            status.textContent = student.status || "Not marked";
+
+            if (student.status === "Present") present += 1;
+            if (student.status === "Absent") absent += 1;
+            row.append(name, status);
+            list.append(row);
+          });
+
+          summary.textContent = `Present: ${present} · Absent: ${absent} · Not marked: ${
+            result.students.length - present - absent
+          }`;
+          summary.hidden = false;
+          setMessage(`Attendance report for ${date}.`);
+        } catch (error) {
+          setMessage(error.message, true);
+        }
+      }
+
+      dateInput.value = today();
+      searchButton.addEventListener("click", searchAttendance);
+      reportButton.addEventListener("click", fetchReport);
+      markButton.addEventListener("click", markAttendance);
+      searchAttendance();
+    </script>
+  </body>
+</html>
